@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="manifest" href="./ambient-clock.webmanifest">
+    <title>Ambient clock</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=M+PLUS+1p:wght@700&display=swap');
+
+        html {
+            width: 100%;
+            height: 100%;
+        }
+        body {
+            font-family: monospace;
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            transition-duration: 5s;
+            transition-timing-function: linear;
+            transition-property: color background-color;
+        }
+        .clock {
+            position: absolute;
+            top: 50%;
+            width: 100%;
+            transform: translateY(-50%);
+            text-align: center;
+            font-family: 'M PLUS 1p', sans-serif;
+        }
+        .clock_main {
+            font-size: 22vmin;
+            line-height: 0.9em;
+        }
+        .clock_sub {
+            font-size: 7.5vmin;
+        }
+        .control {
+            position: fixed;
+            display: inline-flex;
+            flex-direction: column;
+            right: 0;
+            background-color: #999;
+            padding: 1rem;
+        }
+        .control button {
+            padding: 1rem;
+        }
+
+        .tick {
+            animation: ticker 1s linear 0s normal infinite both;
+        }
+
+        @keyframes ticker {
+            0% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.75;
+            }
+
+            100% {
+                opacity: 1;
+            }
+        }
+
+        /* カラースキームまわり */
+        .dim {
+            color: rgb(128, 128, 128);
+        }
+        .hidden {
+            visibility: hidden;
+        }
+
+        body {
+            background-color: #fff;
+            color: #000;
+            text-shadow: 0 0 4px rgba(0, 0, 0, 0.2);
+        }
+        body.invert {
+            background-color: #000;
+            color: #fff;
+            text-shadow: 0 0 4px rgba(255, 255, 255, 0.5);
+        }
+        @media (prefers-color-scheme: dark) {
+            body {
+                background-color: #000;
+                color: #fff;
+                text-shadow: rgba(255, 255, 255, 0.2);
+            }
+            body.invert {
+                background-color: #fff;
+                color: #000;
+                text-shadow: rgba(0, 0, 0, 0.2);
+            }
+        }
+    </style>
+    <script src="https://kit.fontawesome.com/8face72bf0.js" crossorigin="anonymous"></script>
+    <script type="module">
+        import {h, text, app} from "https://esm.run/hyperapp"
+
+        const icon = (name) => {
+            // <i class="fas fa-adjust"></i>
+            return h("i", {class: `fas fa-${name}`})
+        }
+
+        const InvertColorScheme = state => ({
+            ...state,
+            invert_color: !state.invert_color
+        })
+
+        let timer;
+        const showControlDelay = (dispatch, { action, interval }) => {
+            if (timer) {
+                clearTimeout(timer)
+            }
+            timer = setTimeout(() => dispatch(action, 'delay!'), interval);
+        };
+
+        const ShowControl = state => [
+            {...state, show_control: true},
+            [showControlDelay, {action: HideControl, interval: 5000}]
+        ]
+
+        const HideControl = state => ({
+            ...state,
+            show_control: false
+        })
+
+        const ToggleFullScreen = state => [
+            state,
+            [changeFullscreen, {to: !state.full_screen}]
+        ]
+
+        const FullScreenToggled = to => state => ({
+            ...state,
+            full_screen: to
+        })
+
+        const ChangeClock = (sub, date) => state => ({
+            ...state,
+            clock: {
+                ...state.clock,
+                sub,
+                date
+            }
+        })
+
+        const changeFullscreen = async (dispatch, {to}) => {
+            if (to) {
+                try {
+                    //await document.body.requestFullscreen()
+                    await document.querySelector("html").requestFullscreen()
+                } catch(e) {
+                    console.log(e)
+                }
+            } else {
+                try {
+                    await document.exitFullscreen()
+                } catch(e) {
+                    console.log(e)
+                }
+            }
+            dispatch(FullScreenToggled(to))
+        }
+
+        const ticker = (dispatch, {interval}) => {
+            console.log("tick!")
+            const timer = setInterval(() => dispatch(tick()), 1000)
+
+            return () => clearInterval(timer)
+        }
+
+        const d2 = (num) => num.toString().padStart(2, "0")
+
+        const formatMainDate = date => {
+            return `${d2(date.getHours())}:${d2(date.getMinutes())}:${d2(date.getSeconds())}`
+        }
+
+        const formatSubDate = date => {
+            return `${d2(date.getMonth())}月 ${d2(date.getDate())}日 ${getDay(date)}曜日`
+        }
+
+        const getDay = date => {
+            return [
+                "日",
+                "月",
+                "日",
+                "水",
+                "木",
+                "金",
+                "土"
+            ]
+            [date.getDay()]
+        }
+
+        const tick = () => {
+            const date = new Date()
+            const sub = formatSubDate(date)
+            return ChangeClock(sub, date)
+        }
+
+        const ClockMain = (date) => {
+            return h("span", {class: "clock_main"}, [
+                h("span", {}, text(d2(date.getHours()))),
+                h("span", {class: "tick"}, text(":")),
+                h("span", {}, text(d2(date.getMinutes())))
+            ])
+        }
+
+        app({
+            init: {
+                full_screen: false,
+                show_control: false,
+                invert_color: false,
+                clock: {
+                    sub:  "Hello world",
+
+                    date: new Date()
+                }
+            },
+            view: state => (
+                h("body", {class: ["app", {"invert": state.invert_color}], onclick: ShowControl}, [
+                    h("div", {class: "clock"}, [
+                    h("div", {class: "clock_sub"}, [
+                            text(state.clock.sub)
+                        ]),
+                        h("div", {class: "clock_main"}, [
+                            ClockMain(state.clock.date)
+                        ])
+                    ]),
+                    h("div", {class: ["control", {"hidden": !state.show_control}]}, [
+                        h("button", {class: "fullscreen", onclick: ToggleFullScreen}, [
+                            icon("expand-alt")
+                        ]),
+                        h("button", {class: "light", onclick: InvertColorScheme}, [
+                            icon("adjust")
+                        ])
+                    ])
+                ])
+            ),
+            node: document.body,
+            subscriptions: state => [
+                [ticker, {interval: 1000}]
+            ]
+        })
+    </script>
+</head>
+<body>
+    <div id="app"></div>
+</body>
+</html>
